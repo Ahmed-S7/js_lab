@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link  rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inclusive+Sans:ital,wght@0,300..700;1,300..700&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+        <meta charset="UTF-8">
+
+        <script class="js_code">
+        'use strict';
+         window.addEventListener('load', main);
+        
+         function main(){
+            
+            const tickIntervalTracker =  TickIntervalTracker.getInstance();
+            tickIntervalTracker.start();   
+            
+            const clock = new Clock("clockText");  
+            clock.start();
+            const stopwatch = new StopWatch("start_watch","stop_watch","reset_watch","stopwatchText");
+            const timer = new Timer("timerminutes",'timerseconds', 'timerText',"timerIndicator","timerswitch");
+         
+          
+           
+        }  
+        //this class is used to represent a ticker throughout the application in its different forms
+        //uses the singleton observer pattern
+        //stores a SINGLE instance  of the tick interval tracker so that everything that ticks has its OWN tick interval tracker (clock, stopwatch, timer, countdown)
+        class TickIntervalTracker{
+            static instance;//the current instance of the ticker interval tracker object
+            observers = [];//the observers for the tick interval tracker 
+            timeoutId = null;//current timeout ID, used to track the timeout for the TickIntervalTracker, ensures singleton pattern
+
+
+            constructor(){
+                if (TickIntervalTracker.instance){
+                    throw new Error("There can only be one ticker interval tracker, use Ticker.getInstance()");
+                }
+                TickIntervalTracker.instance = this;
+            }
+
+            //returns of creates an instance of the interval tracker for observers to check 
+            static getInstance(){
+                if(!TickIntervalTracker.instance){
+                    TickIntervalTracker.instance = new TickIntervalTracker();
+                }
+                return TickIntervalTracker.instance;
+
+            }
+
+            //remove an object as an observer (pausing,stopping or resetting operations)
+            removeObserver(observer){
+                this.observers = this.observers.filter(o => o !== observer);
+            }
+
+            //add an object as an observer (starting timer or stopwatch, beggining clock display, starting countdown)
+            addObserver(observer){
+                this.observers.push(observer);
+            }
+            
+            //notifies each observer to update it's representation
+            notify(){
+
+                //update all of the observers, they all have their own update method
+                this.observers.forEach(observer => observer.update());
+                this.timeoutId=setTimeout(() =>
+                this.notify(),
+                1000);
+
+            }
+
+            /*Responsible for starting the timeout
+            - it calls the notify function which recursively sets a new timeout id each second*/
+            start(){
+                if (!this.timeoutId){
+                    this.notify();
+                }
+            }
+
+            stop(){
+                if(this.timeoutId){
+                    clearTimeout(this.timeoutId);
+                    this.timeoutId = null;
+                }
+            }
+
+        }
+
+
+        /*Class representing the clock object in the app*/
+        class Clock{
+
+            constructor(clock_text){
+                this.clockText = document.getElementById(clock_text);
+                this.tickIntervalTracker=TickIntervalTracker.getInstance();
+            }
+
+            start(){
+                this.tickIntervalTracker.addObserver(this);
+                this.displayTime();
+            }
+
+            update(){
+                    this.displayTime();
+
+            }
+               
+            displayTime(){
+                const currentTime = new Date();
+                const hours = currentTime.getHours();
+                const minutes = currentTime.getMinutes();
+                const seconds = currentTime.getSeconds();
+                const ms = currentTime.getMilliseconds();
+                const hours12 = hours === 0 ?  12 : hours % 12; //if hours is 0, set to 12, else leave as is
+                const am_pm = hours > 12 ? "PM" : "AM";// is hours greater than 12, set to PM else AM
+
+                
+                this.clockText.textContent =     
+                `${hours12}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')} ${am_pm}`;//X:00:00:000
+
+            }
+        }
+
+        class Timer{
+            constructor(minutes, seconds, timertext,timerIndicator,timerswitch){
+
+                this.minuteslabel = document.getElementById(minutes);//minutes input
+                this.secondslabel = document.getElementById(seconds);//seconds input
+                this.timertext = document.getElementById(timertext);//current time on timer
+                this.timerswitch=document.getElementById(timerswitch);//checkbox to trigger timer
+                this.timerIndicator=document.getElementById(timerIndicator);//text indicator for time ending or stopped timer
+                this.timeLeft = 0;
+                this.maxminutes = 1439;
+                this.maxseconds = 59;
+                this.isRunning = false; 
+                this.tickIntervalTracker = TickIntervalTracker.getInstance();
+                this.setupListeners();
+                this.setTimeValues(); //parses the times
+            }
+
+            setTimeValues()
+            {
+                this.minutes = parseInt(this.minuteslabel.value) || 0;
+                this.seconds = parseInt(this.secondslabel.value) || 0;
+                this.timeLeft = (this.minutes * 60) + this.seconds;
+            }
+
+            disableTimeChanges(){
+                this.minuteslabel.disabled = true;
+                this.secondslabel.disabled= true;
+            }
+
+            enableTimeChanges(){
+                 this.minuteslabel.disabled = false;
+                 this.secondslabel.disabled= false;
+            }
+
+            uncheckTimerSwitch(){
+                this.timerswitch.checked=false;
+            }
+
+            checkTimerSwitch(){
+                this.timerswitch.checked=true;
+            }
+
+            clearTimes(){
+                this.minutes=null;
+                this.seconds=null;
+                this.timeLeft=0;
+                this.minuteslabel.value=0;
+                this.secondslabel.value=0;
+            }
+
+            showMessage(alert){
+                this.timerIndicator.textContent=alert;
+                this.timerIndicator.hidden = false;
+            }
+            hideMessage(){
+                this.timerIndicator.hidden = true;
+            }
+
+            validateTimes(){
+
+                    this.hideMessage();
+
+                    //set the time values based on the current input
+                    this.setTimeValues();
+
+                    //validate the minute and seconds times (make sure they are not too large)
+                    if ( !(this.minutes <= this.maxminutes && this.seconds <= this.maxseconds)){
+                        this.showMessage(`please enter valid times: minutes must be less than or equal to 1439 minutes, seconds must be less than or equal to 59 seconds.`);
+                        this.timerswitch.checked = false;
+                        this.clearTimes();
+                        this.displayTimer();
+                        this.uncheckTimerSwitch();
+                        return false;
+                    }
+                    //ensure a time > 0 if left
+                    if (!this.timeLeft > 0){
+                        this.showMessage('time needs be 1 second or longer for timer to run.');
+                        this.clearTimes();
+                        this.displayTimer();
+                        this.uncheckTimerSwitch();
+                        return false;
+                    }
+                    return true;
+            }
+
+            startTimer(){
+
+                if (this.validateTimes()){
+                    
+                    this.hideMessage();
+        
+                    //checked box means the timer is now running
+                    this.isRunning = true;
+
+                    //disable the time labels so that times cannot be changed while the timer is active
+                    this.disableTimeChanges();
+
+
+                    if (this.timeLeft > 0){
+                        this.displayTimer();
+                        this.tickIntervalTracker.addObserver(this);
+
+                    } else{
+                        this.showMessage('time needs be 1 second or longer for timer to run.');
+                        this.uncheckTimerSwitch();
+                        this.enableTimeChanges();
+                        }
+                }
+
+
+            }
+            stopTimer(){
+
+                this.hideMessage();
+
+                //unchecked box means the timer is no longer running
+                this.isRunning = false;
+
+                //enable the time labels so that times can be changed/set while the timer is inactive
+                this.enableTimeChanges();
+
+                //remove observer to stop updates
+                this.tickIntervalTracker.removeObserver(this);
+
+                //display That the timer has been stopped
+                this.showMessage("Timer Stopped");
+
+
+            }
+
+    
+
+        
+            setupListeners(){
+
+                this.timerswitch.addEventListener('change', ()=>{
+
+                    //checked box
+                    if(this.timerswitch.checked){
+                        this.startTimer();
+                    //unchecked box
+                     } else{
+                        this.stopTimer();
+                     }
+                 
+
+
+
+                });
+
+            }
+
+            update(){
+                    
+                    //decrement and display the time (every timeout interval)
+                    this.timeLeft--;
+                    this.displayTimer();
+                    //console.log(this.timeLeft);
+
+                    //If the timer runs out of time, we need to remove the observer and indicate the end of the timer to the user
+                    //Buttons should also be re-enabled to run as usual
+                    if (this.timeLeft <= 0){
+                        this.clearTimes();
+                        this.tickIntervalTracker.removeObserver(this);
+                        this.showMessage("Time's Up!")
+                        this.enableTimeChanges();//enables new timer
+                        this.uncheckTimerSwitch();//state is now stopped timer
+
+                    }
+            }
+
+            displayTimer(){
+                const minutes = this.minutes;
+                const seconds = this.seconds;
+
+                const minutesremaining = Math.floor(this.timeLeft /60);//nearest whole minute
+                const secondsremaining = Math.floor(this.timeLeft % 60);//seconds remainder
+                console.log(minutesremaining,secondsremaining);
+
+                this.timertext.textContent = `${minutesremaining.toString().padStart(2, '0')}:${secondsremaining.toString().padStart(2, '0')}`;
+
+                
+            }
+
+
+            
+        }
+
+        /*Represents the stopwatch in the application with all of its functionality*/
+        /*focuses on tracking the difference between the start time and current time to know the time on the stop watch*/
+        class StopWatch{
+
+            constructor(start_watch, stop_watch,reset_watch, watch_text){
+                this.stopwatchtext= document.getElementById(watch_text);
+                this.startwatchbutton = document.getElementById(start_watch);
+                this.stopwatchbutton=document.getElementById(stop_watch);
+                this.resetwatchbutton=document.getElementById(reset_watch);
+                this.startTime=null;
+                this.timeElapsed = 0;
+                this.isRunning = false;
+
+            
+
+                this.tickIntervalTracker = TickIntervalTracker.getInstance();
+                this.setupListeners();
+
+            }
+
+    
+
+            setupListeners(){
+                
+                //starts the stop watch if it isn't already running 
+                //sets the start time
+                //adds the instance as an observer
+                //disables the start button
+                this.startwatchbutton.addEventListener('click', ()=>{
+                if (!this.isRunning){
+                    this.startTime=Date.now() - this.timeElapsed;
+                    this.isRunning= true;
+                    TickIntervalTracker.getInstance().addObserver(this);
+                    this.startwatchbutton.disabled=true;
+                    this.stopwatchbutton.disabled=false;
+                }
+                      
+                });
+
+                //current time - time that has passed = the actual time that the stopwatch was start (i.e 11pm - 5 minutes = started at 10:55pm)
+                this.stopwatchbutton.addEventListener('click', ()=>{
+                if (this.isRunning){
+                    this.startTime=Date.now() - this.timeElapsed;//stores the time that the stopwatch got paused
+                    this.isRunning = false;
+                    TickIntervalTracker.getInstance().removeObserver(this);
+                    this.startwatchbutton.disabled=false;
+                    this.stopwatchbutton.disabled=true;
+                }
+
+                });
+
+                this.resetwatchbutton.addEventListener('click', ()=>{
+                    this.timeElapsed = 0;
+                    this.stopwatchtext.textContent="0:00:00.000";
+                    this.isRunning = false;
+                    TickIntervalTracker.getInstance().removeObserver(this);
+                    this.startwatchbutton.disabled=false;
+                    this.stopwatchbutton.disabled=false;
+                });
+
+
+            }
+            
+            update(){
+                //set the current time only if the clock is running
+                if (this.isRunning){
+                    this.timeElapsed = Date.now() - this.startTime;//current time - the time that stopwatch began counting, i.e 11:00pm(in ms) - 10:55pm(in ms) = 5min(in ms) so 5 minutes displayed on stopwatch
+                    this.displayTime();
+                }
+            }
+
+            displayTime(){
+                const totalTime = this.timeElapsed;
+                const hours = Math.floor(totalTime/3600000);
+                const minutes = Math.floor((totalTime % 3600000)/60000);//using mod here to retrieve the remainder of the division which corresponds to minutes in ms, then divided by 60000 to get minutes
+                const seconds = Math.floor((totalTime % 60000)/1000);//remainder from minutes/1000 to convert from ms to seconds
+                const ms = Math.floor(totalTime % 1000);//nearest whole ms
+
+                
+                
+                this.stopwatchtext.textContent = 
+            `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;//X:00:00:000
+
+            }
+
+            }
+    
+
+        </script>
+       
+        <style>
+
+            html{
+                background-image: url('https://images.pexels.com/photos/247478/pexels-photo-247478.jpeg?cs=srgb&dl=dawn-landscape-mountains-247478.jpg&fm=jpg');
+            }
+            html, button{
+                 font-family: 'Roboto', sans-serif;
+                 background-color: rgb(255, 255, 255);
+            
+            }
+            
+            section{
+                box-shadow: 0 0.125em 0.38em rgba(0, 0, 0, 0.208);
+                border-style: solid;
+                border-width:0.0625em;
+                border-radius:1em;
+                justify-content: center;
+                text-align: center;
+                padding:1em;
+                max-width: 50%;
+                border-color:rgba(224, 109, 80, 0.571);
+                align-items:center;
+                background-color: rgba(255, 255, 255, 0.756);
+
+            }
+
+            body{  
+                padding-top:3em;
+                padding-bottom: 3em;
+                display:flex;
+                flex-direction: column;
+                align-items:center;
+            }
+
+            p{
+                font-size: 1.5em;
+                font-family: 'Roboto', sans-serif;
+            }
+            
+            h1{
+                font-variant: small-caps;
+                font-size: 2em;
+            }
+
+            #clockText{
+                border-style: solid;
+                padding:0.5em;
+                border-color:rgba(224, 109, 80, 0.571);
+                border-radius:1em;
+            }
+
+            button{
+                background: none;
+                border-radius:1em;
+                font-size: 1em;
+                background-color: rgba(224, 109, 80, 0.571);
+            }
+            #timerminutes, #timerseconds {
+                font-size: 1em;
+                max-width:4em;
+                overflow:hidden;
+                text-overflow:ellipsis;
+            }
+
+            label{
+             font-size: 1em;
+             font-family: 'Roboto', sans-serif;
+             padding-bottom: 10em;
+
+            }
+            .timeDisplay{
+                border-style: solid;
+                padding:0.5em;
+                border-color:rgba(224, 109, 80, 0.571);
+                border-radius:1em;
+                max-width: fit-content;
+                margin-left:auto;
+                margin-right:auto;   
+            }
+            form{
+                text-align:center;
+            }
+            section.timerlabels{
+                display:flex;
+                background: none;
+                border:none;
+                box-shadow: none;
+                max-width: fit-content;
+                padding-top:0.5em;
+                padding-right:0.1em;
+                padding-left:0.1em;
+                gap:1em;
+                flex-direction: row; 
+            }
+            .timer{
+                padding:0em;
+            }
+            section.container{
+                display:flex;
+                width:80%;
+                justify-content: space-evenly;
+                flex-direction: column;
+                gap:1em;
+                border:none;
+                box-shadow:none;
+                background:none;
+
+            }
+            #timerIndicator{
+                font-size: 1em;
+                color: rgba(224, 109, 80, 0.571);  
+            }
+        </style>
+
+    </head>
+    <body>
+
+  
+
+<section class="container">   
+
+
+    <!---------------------------------------All things 'Clock'------------------------------------------->
+    <section class='clock'>
+        <p id="clockTitle">CLOCK</p>
+        <h2 class="timeDisplay" id='clockText'>00:00:00</h2>
+
+    </section>
+
+    <!----------------------------------All things 'Countdown'--------------------------------------------->
+   
+    <section>
+        <h1 id='countdownTitle'>countdown </h1> 
+    </section>
+    
+
+
+    <!-----------------------------------All things 'Timer'---------------------------------------------->
+    <section class='timer'>
+        
+        <p id="timerTitle">TIMER</p>
+        <form>
+            <section class="timerlabels">
+
+                <section class="timerminutesection">
+                    <label>Minutes:</label>
+                    <input type="number" id="timerminutes" name="minutes" value="0" min='0' max='1439'><br>
+                </section>
+
+                <section class="timersecondsection">
+                    <label>Seconds:</label>
+                    <input type="number" id="timerseconds" name="seconds" value="0" min='0' max='59'><br>
+                </section>
+
+            </section>
+
+        <input type="checkbox" id="timerswitch">Run Timer 
+        </form>
+        <p class="timeDisplay" id='timerText'>00:00</p> 
+        <label id="timerIndicator" hidden><p>TImer Stopped</p></label>
+    </section>
+
+
+    <!------------------------------------All things 'Stopwatch'------------------------------------------>
+    <section class='stopwatch'>
+        <p id="clockTitle">STOP WATCH</p>
+
+        <p class="timeDisplay" id='stopwatchText'>0:00:00.000</p>
+
+        <button id="start_watch">Start</button>
+
+        <button id="stop_watch">Stop</button>
+
+        <button id="reset_watch">Reset</button>
+
+ </section>
+
+ 
+
+
+    </body>
+</html>
