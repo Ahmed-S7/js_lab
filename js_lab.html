@@ -1,12 +1,21 @@
 <!DOCTYPE html>
+<!--
+ * Collaboration Statement:
+ * - Referenced MDN Web Docs for Date/time handling methods.
+ * - Used Deepseek AI (https://chat.deepseek.com/) for debugging countdown timer logic as well as some structure adjustments/debugging
+ * - All code implementation was done independently.
+-->
 <html lang="en">
-    <head>
 
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link  rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Inclusive+Sans:ital,wght@0,300..700;1,300..700&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
-        <meta charset="UTF-8">
+        <head>
 
+            <link rel="preconnect" href="https://fonts.googleapis.com">
+            <link  rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+            <link href="https://fonts.googleapis.com/css2?family=Inclusive+Sans:ital,wght@0,300..700;1,300..700&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+            <meta charset="UTF-8">
+
+        </head>
+        
         <script class="js_code">
         'use strict';
          window.addEventListener('load', main);
@@ -18,6 +27,7 @@
             
             const clock = new Clock("clockText");  
             clock.start();
+            const countdown = new Countdown("countdownText", "startcountdown","resetcountdown", "dateSelector", "countdownIndicator");
             const stopwatch = new StopWatch("start_watch","stop_watch","reset_watch","stopwatchText");
             const timer = new Timer("timerminutes",'timerseconds', 'timerText',"timerIndicator","timerswitch");
          
@@ -62,6 +72,12 @@
             //notifies each observer to update it's representation
             notify(){
 
+                // Clear any existing timeout first
+                if (this.timeoutId) {
+                    clearTimeout(this.timeoutId);
+                }
+
+
                 //update all of the observers, they all have their own update method
                 this.observers.forEach(observer => observer.update());
                 this.timeoutId=setTimeout(() =>
@@ -87,7 +103,242 @@
 
         }
 
+        /*Class representing the countdown object in the application*/
+        class Countdown{
 
+
+            constructor(countdownText, startcountdownbtn, resetcountdownbtn, dateSelector,countdownIndicator){
+                this.countdownText = document.getElementById(countdownText);
+                this.startcountdownbtn = document.getElementById(startcountdownbtn);
+                this.resetcountdownbtn = document.getElementById(resetcountdownbtn);
+                this.dateSelector = document.getElementById(dateSelector);
+                this.countdownIndicator = document.getElementById(countdownIndicator);
+                this.endDate = null;
+                this.isFutureDate = null;
+                this.futureIndicator = null;//checks that the countdown deadline is in the future or not, assigned to true for yes, false for no
+                this.message = null;
+                this.startDate = null;
+                this.isRunning = false;
+                this.timeLeft = 0;
+                this.defaultText = "0 years, 0 days, 0 hours, 0 minutes, and 0 seconds remaining"
+                this.tickIntervalTracker = TickIntervalTracker.getInstance();
+                this.setupListeners();
+
+            }
+
+            setupListeners(){
+                console.log("Countdown setup complete");
+                this.startcountdownbtn.addEventListener('click', ()=>{
+                    
+                    this.endDate = new Date(this.dateSelector.value).getTime();//time parsed from the date selector
+                    //validate the selected date
+                    //once validated, begin the countdown process
+                    if (this.isValidTime()){
+
+                        //countdown begins from today
+                        this.startDate = Date.now();
+                        console.log(` End date in milliseconds: ${this.endDate}\n Start date in milliseconds: ${this.startDate}`);
+                        
+                        //start the countdown processing
+                        this.startCountDown();
+                       
+                
+                }else{
+
+                    return;
+                }
+            });
+
+            this.resetcountdownbtn.addEventListener('click', ()=>{
+                this.resetCountdown();
+            });
+
+            }
+
+            isValidTime(){
+                if (!(isNaN(this.endDate)) && this.endDate){//if the selected date is valid, return
+                    return true;
+
+                }else{
+
+                    return false;
+                }
+                    
+
+            }
+            startCountDown(){
+                this.hideMessage();
+                this.isRunning = true;
+                this.setFutureStatus();//stores whether the date is in the future or in the past
+                this.timeDifference = this.calculateTimeDifference();//find the time difference between now and the time of the countdown
+                const calculatedTimes = this.getTimeUnits();//find the time until or time since the desired date
+                //set the text for the indicator message:
+                // - if the start date is past the countdown date, message is "since" (past), otherwise it is "remaining"(future)
+               
+                console.log(`Is a future countdown date: ${this.isFutureDate}`);
+                console.log(calculatedTimes);
+                console.log(this.calculateTimeDifference());
+                this.displayCountdown();
+                this.tickIntervalTracker.addObserver(this);
+
+            }
+
+            getTimeUnits() {
+                const startDate = new Date(this.startDate);
+                const endDate = new Date(this.endDate);
+                const isFuture = this.isFutureDate;
+
+                //Ensure that the subtraction is always Later Date - Earlier Date (for smoother calculations)
+                const to = isFuture ? startDate : endDate; //to is the is the earlier date
+                const from = isFuture ? endDate : startDate;//from is the later date
+
+
+                //find the differences between the date values
+                let years = from.getFullYear() - to.getFullYear();
+                let months = from.getMonth() - to.getMonth();
+                let days = from.getDate() - to.getDate();
+                let hours = from.getHours() - to.getHours();
+                let minutes = from.getMinutes() - to.getMinutes();
+                let seconds = from.getSeconds() - to.getSeconds();
+
+                // Borrowing logic
+
+                //each operation is basically the equivalent of using a mod operator within different units
+                //smaller unit mod (count of smaller unit in its container)
+                //i.e: -hours mod (24 hours in a day)
+                //e.g: -1 seconds -> 59 seconds (-1 + 60), if minutes is 1, it would become 0
+                //we go from 1min -1 seconds -> 0 minutes 59 seconds
+                if (seconds < 0) {
+                    seconds += 60;
+                    minutes--;
+                }
+                if (minutes < 0) {
+                    minutes += 60;
+                    hours--;
+                }
+                if (hours < 0) {
+                    hours += 24;
+                    days--;
+                }
+
+                //when you make the days 0 in new Date(), it goes to the last day of the for the month before whatever month index is entered
+                //***months are 0 indexed***
+                // so this can be used to find the month before the current one
+                //getDate() retrieves the days in a date, so the days can be added on to the negative day values
+                if (days < 0) {
+                    months--;//wrap around like for all of the other units
+                    const tempDate = new Date(to.getFullYear(), to.getMonth(), 0); // last day of previous month
+                    days += tempDate.getDate();//adds on the number of days from the previous month using the day value of the date object
+                }
+                if (months < 0) {
+                    months += 12;
+                    years--;
+                }
+
+                return {
+                    years,
+                    months,
+                    days,
+                    hours,
+                    minutes,
+                    seconds
+                };
+            }
+
+            showMessage(message){
+                this.countdownIndicator.textContent = message;
+                this.countdownIndicator.hidden = false; 
+
+            }
+
+            hideMessage(){
+                this.countdownIndicator.hidden = true; 
+            }
+            
+            resetCountdown(){
+                //clear all values, remove the observer, reset the countdown
+                this.startTime=null;
+                this.endDate=null;
+                this.isFutureDate=null;
+                this.isRunning=false;
+                this.dateSelector.value = null;
+                this.countdownText.textContent="0 years, 0 days, 0 hours, 0 minutes, and 0 seconds remaining";
+                this.tickIntervalTracker.removeObserver(this);
+
+            }
+
+            update(){
+                if (this.isRunning){
+                    
+                this.startDate = Date.now()//update the start time to the current time
+
+                    //check if we have reached the date of the countdown for future countdown deadlines
+                    if(this.isFutureDate){
+                        
+                        if(this.startDate >= this.endDate){//if we have passed the end date, show the user a message
+                            this.resetCountdown();
+                            this.showMessage("Congratulations!, You've Reached the End of The Countdown!") 
+                            console.log("timer complete.");
+                        }
+                    
+                    
+                    }
+
+                    this.displayCountdown();
+                    console.log("displaying Countdown Information:");
+                }
+            }
+            calculateTimeDifference(){
+                return Math.abs(this.endDate - this.startDate);
+
+            }
+            setFutureStatus(){
+
+                 if (this.startDate <= this.endDate){
+                    this.isFutureDate = true;
+                }else{
+                    this.isFutureDate = false;
+                }
+            }
+
+            getFutureStatus(){
+
+                return this.isFutureDate;
+            }
+
+
+
+            getCountdownSuffix(){
+                //get the sentence end for the countdown text
+                 if (this.startDate >= this.endDate){
+                    return "ago";
+                }else{
+                    return "remaining";
+                }
+
+            }
+
+        
+
+            displayCountdown(){
+                let timeInfo = null;
+
+                if (this.isRunning){
+                    timeInfo = this.getTimeUnits();
+                    const countdownSuffix = this.getCountdownSuffix();
+                    this.countdownText.textContent = `${timeInfo.years} years, ${timeInfo.months} months, ${timeInfo.days} days, ${timeInfo.hours} hours, ${timeInfo.minutes} minutes, and ${timeInfo.seconds} seconds ${countdownSuffix}`;
+
+                }
+                else{
+                    this.countdownText.textContent = this.defaultText;
+                    console.log(timeInfo);
+                }  
+               
+
+
+
+            }
+        }
         /*Class representing the clock object in the app*/
         class Clock{
 
@@ -131,19 +382,19 @@
                 this.timerswitch=document.getElementById(timerswitch);//checkbox to trigger timer
                 this.timerIndicator=document.getElementById(timerIndicator);//text indicator for time ending or stopped timer
                 this.timeLeft = 0;
+                this.endTime = null;
                 this.maxminutes = 1439;
                 this.maxseconds = 59;
                 this.isRunning = false; 
                 this.tickIntervalTracker = TickIntervalTracker.getInstance();
                 this.setupListeners();
-                this.setTimeValues(); //parses the times
             }
 
             setTimeValues()
             {
                 this.minutes = parseInt(this.minuteslabel.value) || 0;
                 this.seconds = parseInt(this.secondslabel.value) || 0;
-                this.timeLeft = (this.minutes * 60) + this.seconds;
+                this.timeLeft = ((this.minutes * 60) + this.seconds) * 1000;//in ms
             }
 
             disableTimeChanges(){
@@ -196,7 +447,7 @@
                         this.uncheckTimerSwitch();
                         return false;
                     }
-                    //ensure a time > 0 if left
+                    //ensure a time > 0 if entered
                     if (!this.timeLeft > 0){
                         this.showMessage('time needs be 1 second or longer for timer to run.');
                         this.clearTimes();
@@ -212,10 +463,15 @@
                 if (this.validateTimes()){
                     
                     this.hideMessage();
-        
+                    
+                    this.setTimeValues();
+
                     //checked box means the timer is now running
                     this.isRunning = true;
-
+                    
+                    //endtime will be the current time with the time remaining added on to it
+                    this.endTime = Date.now() + this.timeLeft
+                    
                     //disable the time labels so that times cannot be changed while the timer is active
                     this.disableTimeChanges();
 
@@ -239,6 +495,14 @@
 
                 //unchecked box means the timer is no longer running
                 this.isRunning = false;
+
+                //show the time that the timer was stopped
+                this.displayTimer();
+
+                 if (this.timeLeft <= 0){
+                        this.clearTimes();
+                 }
+                        
 
                 //enable the time labels so that times can be changed/set while the timer is inactive
                 this.enableTimeChanges();
@@ -275,10 +539,12 @@
             }
 
             update(){
+                if(this.isRunning){
                     
-                    //decrement and display the time (every timeout interval)
-                    this.timeLeft--;
-                    this.displayTimer();
+    
+                    const currentTime = Date.now()
+                    this.timeLeft = (this.endTime - currentTime);//difference between the time it is now and the time it is intended to end
+                  
                     //console.log(this.timeLeft);
 
                     //If the timer runs out of time, we need to remove the observer and indicate the end of the timer to the user
@@ -289,19 +555,23 @@
                         this.showMessage("Time's Up!")
                         this.enableTimeChanges();//enables new timer
                         this.uncheckTimerSwitch();//state is now stopped timer
+                    }  
 
+                    this.displayTimer();
+
+                    }else{
+                        return;
                     }
             }
 
             displayTimer(){
-                const minutes = this.minutes;
-                const seconds = this.seconds;
 
-                const minutesremaining = Math.floor(this.timeLeft /60);//nearest whole minute
-                const secondsremaining = Math.floor(this.timeLeft % 60);//seconds remainder
+                const minutesremaining = Math.floor(this.timeLeft /60000);//nearest whole minute
+                const secondsremaining = Math.floor((this.timeLeft % 60000)/1000);//seconds remainder
                 console.log(minutesremaining,secondsremaining);
+                const ms = Math.floor(this.timeLeft%1000);
 
-                this.timertext.textContent = `${minutesremaining.toString().padStart(2, '0')}:${secondsremaining.toString().padStart(2, '0')}`;
+                this.timertext.textContent = `${minutesremaining.toString().padStart(2, '0')}:${secondsremaining.toString().padStart(2, '0')}.${ms.toString().padStart(3,'0')}`;
 
                 
             }
@@ -330,7 +600,15 @@
 
             }
 
-    
+            resetWatch(){
+                this.timeElapsed = 0;
+                this.stopwatchtext.textContent="0:00:00.000";
+                this.isRunning = false;
+                TickIntervalTracker.getInstance().removeObserver(this);
+                this.startwatchbutton.disabled=false;
+                this.stopwatchbutton.disabled=false;
+
+            }
 
             setupListeners(){
                 
@@ -362,12 +640,7 @@
                 });
 
                 this.resetwatchbutton.addEventListener('click', ()=>{
-                    this.timeElapsed = 0;
-                    this.stopwatchtext.textContent="0:00:00.000";
-                    this.isRunning = false;
-                    TickIntervalTracker.getInstance().removeObserver(this);
-                    this.startwatchbutton.disabled=false;
-                    this.stopwatchbutton.disabled=false;
+                    this.reset_watch();
                 });
 
 
@@ -382,17 +655,27 @@
             }
 
             displayTime(){
+                
                 const totalTime = this.timeElapsed;
                 const hours = Math.floor(totalTime/3600000);
+                //display up to 24 hours because days are not handled in this stopwatch
+                if(hours > 23){
+                    this.resetWatch();
+                }
+                else{
+
                 const minutes = Math.floor((totalTime % 3600000)/60000);//using mod here to retrieve the remainder of the division which corresponds to minutes in ms, then divided by 60000 to get minutes
                 const seconds = Math.floor((totalTime % 60000)/1000);//remainder from minutes/1000 to convert from ms to seconds
                 const ms = Math.floor(totalTime % 1000);//nearest whole ms
-
+                
+                
                 
                 
                 this.stopwatchtext.textContent = 
-            `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;//X:00:00:000
-
+                `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;//X:00:00:000
+                
+        }
+            
             }
 
             }
@@ -408,6 +691,9 @@
             html, button{
                  font-family: 'Roboto', sans-serif;
                  background-color: rgb(255, 255, 255);
+                 background-size:100% 100%;
+                 background-repeat:repeat;
+                 background-position: center;
             
             }
             
@@ -427,16 +713,25 @@
             }
 
             body{  
-                padding-top:3em;
-                padding-bottom: 3em;
+                padding-top:0em;
                 display:flex;
                 flex-direction: column;
                 align-items:center;
+                justify-content: space-evenly;
+                height: 100%;
+                gap:2em;
+                margin-top:0em;
+                margin-bottom:0em;
+                height:100vh;
+
             }
 
             p{
-                font-size: 1.5em;
+                font-size: 2em;
                 font-family: 'Roboto', sans-serif;
+             
+                font-style:italic;
+                font-weight:bold;
             }
             
             h1{
@@ -449,6 +744,7 @@
                 padding:0.5em;
                 border-color:rgba(224, 109, 80, 0.571);
                 border-radius:1em;
+                font-size: 2em;
             }
 
             button{
@@ -464,10 +760,10 @@
                 text-overflow:ellipsis;
             }
 
-            label{
+            label.textContent{
              font-size: 1em;
              font-family: 'Roboto', sans-serif;
-             padding-bottom: 10em;
+             padding-top: 1em;
 
             }
             .timeDisplay{
@@ -487,8 +783,8 @@
                 background: none;
                 border:none;
                 box-shadow: none;
-                max-width: fit-content;
-                padding-top:0.5em;
+                max-width:fit-content;
+                padding-top:0.8em;
                 padding-right:0.1em;
                 padding-left:0.1em;
                 gap:1em;
@@ -502,16 +798,30 @@
                 width:80%;
                 justify-content: space-evenly;
                 flex-direction: column;
-                gap:1em;
                 border:none;
                 box-shadow:none;
                 background:none;
 
             }
-            #timerIndicator{
+            .indicator{
                 font-size: 1em;
-                color: rgba(224, 109, 80, 0.571);  
+                color: rgba(224, 109, 80, 0.989);  
+                font-weight:bold;
+                padding-top:0.5em;
             }
+            #countdownText{
+                font-size: 1em;
+            }
+            input{
+                font-size: 1.5em;
+                color: rgba(237, 33, 15, 0.911);
+                border-radius:0.5em;
+                padding:0.1em;
+                border-color:rgba(237, 33, 15, 0.911);
+                font-variant:small-caps;
+                font-weight:bold;
+            }
+
         </style>
 
     </head>
@@ -519,7 +829,6 @@
 
   
 
-<section class="container">   
 
 
     <!---------------------------------------All things 'Clock'------------------------------------------->
@@ -532,7 +841,15 @@
     <!----------------------------------All things 'Countdown'--------------------------------------------->
    
     <section>
-        <h1 id='countdownTitle'>countdown </h1> 
+        <h1 id='countdownTitle'>countdown </h1>
+        <label>Select a Date to Countdown to: </label>
+        <input type="datetime-local" id="dateSelector"><br>
+        
+        <p class="timeDisplay" id='countdownText'>0 years, 0 days, 0 hours, 0 minutes, and 0 seconds remaining</p>
+        <button id="startcountdown">Start Countdown</button>
+        <button id="resetcountdown">Reset Countdown</button><br>
+        <label class='indicator' id="countdownIndicator" hidden><p></p></label>
+
     </section>
     
 
@@ -559,13 +876,13 @@
         <input type="checkbox" id="timerswitch">Run Timer 
         </form>
         <p class="timeDisplay" id='timerText'>00:00</p> 
-        <label id="timerIndicator" hidden><p>TImer Stopped</p></label>
+        <label class='indicator' id="timerIndicator" hidden><p></p></label>
     </section>
 
 
     <!------------------------------------All things 'Stopwatch'------------------------------------------>
     <section class='stopwatch'>
-        <p id="clockTitle">STOP WATCH</p>
+        <p id="stopwatchTitle">STOP WATCH</p>
 
         <p class="timeDisplay" id='stopwatchText'>0:00:00.000</p>
 
@@ -575,11 +892,9 @@
 
         <button id="reset_watch">Reset</button>
 
- </section>
-
  
 
 
     </body>
 </html>
-<!--some of the code in the program was implemented by consulting Deepseek AI:https://chat.deepseek.com/, July 2025-->
+
